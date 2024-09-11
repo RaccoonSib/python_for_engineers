@@ -1,51 +1,62 @@
-import pandas as pd
-import logging
+import csv
 from datetime import datetime
+from typing import List, Dict
 
-# Настройка логирования
-logging.basicConfig(filename='logs.log', level=logging.DEBUG, format='%(asctime)s | %(levelname)s | %(message)s')
+def read_csv(filename: str) -> List[Dict[str, str]]:
+    data = []
+    with open(filename, newline='') as file:
+        reader = csv.DictReader(file, delimiter=',')
+        for row in reader:
+            data.append(row)
+    return data
 
-# Чтение файла
-url = 'https://drive.google.com/uc?id=1dnjxkoP4PtimuD2SEAFAiztcHDyOYR7r'  # Изменённая ссылка
-df = pd.read_csv(url, sep='\t')
+def log_error(message: str):
+    with open('logs.log', 'a') as log_file:
+        log_file.write(f"{datetime.now()} | ERROR | {message}\n")
 
-# Инициализация словарей для хранения времени
-pool_time = {}
-center_time = {}
+def calculate_time(records: List[Dict[str, str]]):
+    pool_times = {}
+    complex_times = {}
 
-# Обработка данных
-for index, row in df.iterrows():
-    athlete_id = row['Athlete ID']
-    entry_time = row.get('EntryTime')
-    exit_time = row.get('ExitTime')
-    location = row.get('Location')
+    for record in records:
+        athlete_id = record.get('athlete_id')
+        entry_time = record.get('entry_time')
+        exit_time = record.get('exit_time')
+        location = record.get('location')
 
-    # Проверка на наличие времени входа и выхода
-    if pd.isna(entry_time):
-        logging.debug(f'Не зафиксировано время входа атлета {athlete_id} в {location}')
-        continue  # Пропускаем эту запись
+        if not entry_time:
+            log_error(f'Не зафиксировано время входа атлета {athlete_id} в {location}')
+            continue
 
-    if pd.isna(exit_time):
-        logging.debug(f'Не зафиксировано время выхода атлета {athlete_id} из {location}')
-        continue  # Пропускаем эту запись
+        if not exit_time:
+            log_error(f'Не зафиксировано время выхода атлета {athlete_id} из {location}')
+            continue
 
-    # Конвертация строкового времени в datetime
-    entry_time = pd.to_datetime(entry_time)
-    exit_time = pd.to_datetime(exit_time)
+        try:
+            entry_dt = datetime.strptime(entry_time, '%Y-%m-%d %H:%M:%S')
+            exit_dt = datetime.strptime(exit_time, '%Y-%m-%d %H:%M:%S')
 
-    # Вычисление времени проведённого в бассейне или центре
-    duration = (exit_time - entry_time).total_seconds() / 60  # Время в минутах
+            time_in_pool = (exit_dt - entry_dt).total_seconds() / 60  # в минутах
+            if location.startswith('Pool'):
+                pool_times[athlete_id] = pool_times.get(athlete_id, 0) + time_in_pool
+            else:
+                complex_times[athlete_id] = complex_times.get(athlete_id, 0) + time_in_pool
 
-    if location.startswith('Pool'):
-        pool_time[athlete_id] = pool_time.get(athlete_id, 0) + duration
-        print(f"Атлет {athlete_id} провёл в {location}: {duration:.0f} мин.")
-    elif location == 'Center':
-        center_time[athlete_id] = center_time.get(athlete_id, 0) + duration
-        print(f"Атлет {athlete_id} провёл в {location}: {duration:.0f} мин.")
+        except ValueError as e:
+            log_error(f'Ошибка в данных времени для атлета {athlete_id}: {e}')
 
-# Вывод итогов
-for athlete_id, time in pool_time.items():
-    print(f"Атлет {athlete_id} провёл в бассейне: {time:.0f} мин.")
+    return pool_times, complex_times
 
-for athlete_id, time in center_time.items():
-    print(f"Атлет {athlete_id} провёл в центре: {time:.0f} мин.")
+def main():
+    filename = 'C:/Users/vladi/OneDrive/Desktop/module_2/task_8/activity.csv'  # Укажите путь к вашему файлу
+    records = read_csv(filename)
+    pool_times, complex_times = calculate_time(records)
+
+    for athlete_id, minutes in pool_times.items():
+        print(f'Атлет {athlete_id} провёл в бассейне: {int(minutes)} мин.')
+
+    for athlete_id, minutes in complex_times.items():
+        print(f'Атлет {athlete_id} провёл в комплексе: {int(minutes)} мин.')
+
+if __name__ == '__main__':
+    main()
